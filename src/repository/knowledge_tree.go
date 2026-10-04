@@ -7,7 +7,7 @@ import (
 )
 
 type KnowledgeTreeRepository interface {
-	Create(graph *domain.KnowledgeTree) error
+	Create(tree *domain.KnowledgeTree) error
 	FindByID(id uuid.UUID) (*domain.KnowledgeTree, error)
 	DeleteByID(id uuid.UUID) error
 }

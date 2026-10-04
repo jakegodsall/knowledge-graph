@@ -15,8 +15,8 @@ func NewKnowledgeTreeRepository() *KnowledgeTreeRepository {
 	return &KnowledgeTreeRepository{}
 }
 
-func (r *KnowledgeTreeRepository) Create(graph *domain.KnowledgeTree) error {
-	r.trees = append(r.trees, graph)
+func (r *KnowledgeTreeRepository) Create(tree *domain.KnowledgeTree) error {
+	r.trees = append(r.trees, tree)
 	return nil
 }
 
