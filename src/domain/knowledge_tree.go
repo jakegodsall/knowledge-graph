@@ -6,15 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
-type Graph struct {
+type KnowledgeTree struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func NewGraph(name string) *Graph {
-	return &Graph{
+func NewKnowledgeTree(name string) *KnowledgeTree {
+	return &KnowledgeTree{
 		ID:        uuid.New(),
 		Name:      name,
 		CreatedAt: time.Now(),
