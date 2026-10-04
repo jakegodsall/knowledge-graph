@@ -1,3 +1,3 @@
-# Knowledge Graph
+# Knowledge Tree
 
-An LLM-based utility for building knowledge graphs on a given subject.
+An LLM-based utility for building knowledge trees on a given subject.
