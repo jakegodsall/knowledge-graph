@@ -2,14 +2,15 @@ package main
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"jakegodsall/knowledge-graph/src/domain"
 	"jakegodsall/knowledge-graph/src/repository"
 	"jakegodsall/knowledge-graph/src/repository/sqlite"
 	"os"
 	"path/filepath"
-
-	_ "embed"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -25,10 +26,9 @@ func defaultConfig() Config {
 	}
 }
 
-var ktreeRepository repository.KnowledgeTreeRepository
 
-//go:embed migrations/001_create_knowledge_trees_table.up.sql
-var schema string
+//go:embed migrations
+var migrations embed.FS
 
 func main() {
 	config := defaultConfig()
@@ -38,13 +38,40 @@ func main() {
 		os.Exit(1)
 	}
 
+	dirs, err := migrations.ReadDir("migrations")
+
+	if err != nil {
+		fmt.Println("could not read migrations directory")
+		os.Exit(1)
+	}
+
 	db, err := sql.Open("sqlite3", config.DBPath)
 	if err != nil {
 		fmt.Println("could not open database")
 		os.Exit(1)
 	}
 
-	db.Exec(schema)
+	upMigrations := []fs.DirEntry{}
+
+	for _, entry := range dirs {
+		if strings.Contains(entry.Name(), ".up.sql") {
+			upMigrations = append(upMigrations, entry)
+		}
+	}
+
+	for _, entry := range upMigrations {
+		fileName := "migrations/" + entry.Name()
+		content, err := migrations.ReadFile(fileName)
+		if err != nil {
+			fmt.Printf("Could not read migration file %s\n", fileName)
+			os.Exit(1)
+		}
+
+		if _, err := db.Exec(string(content)); err != nil {
+			fmt.Printf("Could not execute migration %s\n", fileName)
+			os.Exit(1)
+		}
+	}
 
 	ktreeRepository := sqlite.NewKnowledgeTreeRepository(db)
 
