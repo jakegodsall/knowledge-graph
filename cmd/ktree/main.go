@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"io/fs"
 	"jakegodsall/knowledge-graph/src/domain"
 	"jakegodsall/knowledge-graph/src/repository"
 	"jakegodsall/knowledge-graph/src/repository/sqlite"
@@ -34,43 +33,20 @@ func main() {
 	config := defaultConfig()
 
 	if err := os.MkdirAll(filepath.Dir(config.DBPath), 0755); err != nil {
-		fmt.Println("could not create data directory")
-		os.Exit(1)
-	}
-
-	dirs, err := migrations.ReadDir("migrations")
-
-	if err != nil {
-		fmt.Println("could not read migrations directory")
+		fmt.Printf("could not create data directory: %v\n", err)
 		os.Exit(1)
 	}
 
 	db, err := sql.Open("sqlite3", config.DBPath)
 	if err != nil {
-		fmt.Println("could not open database")
+		fmt.Printf("could not open database: %v\n", err)
 		os.Exit(1)
 	}
 
-	upMigrations := []fs.DirEntry{}
-
-	for _, entry := range dirs {
-		if strings.Contains(entry.Name(), ".up.sql") {
-			upMigrations = append(upMigrations, entry)
-		}
-	}
-
-	for _, entry := range upMigrations {
-		fileName := "migrations/" + entry.Name()
-		content, err := migrations.ReadFile(fileName)
-		if err != nil {
-			fmt.Printf("Could not read migration file %s\n", fileName)
-			os.Exit(1)
-		}
-
-		if _, err := db.Exec(string(content)); err != nil {
-			fmt.Printf("Could not execute migration %s\n", fileName)
-			os.Exit(1)
-		}
+	err = runMigrations(db)
+	if err != nil {
+		fmt.Printf("error running migrations: %v\n", err)
+		os.Exit(1)
 	}
 
 	ktreeRepository := sqlite.NewKnowledgeTreeRepository(db)
@@ -123,6 +99,64 @@ func runCreate(args []string, repo repository.KnowledgeTreeRepository) error {
 
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func runMigrations(db *sql.DB) error {
+	dirs, err := migrations.ReadDir("migrations")
+
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range dirs {
+		if !strings.Contains(entry.Name(), ".up.sql") {
+			continue
+		}
+
+		fileName := "migrations/" + entry.Name()
+		content, err := migrations.ReadFile(fileName)
+
+		if err != nil {
+			return fmt.Errorf("could not read migration file %s: %w", fileName, err)
+		}
+
+		if _, err := db.Exec(string(content)); err != nil {
+			return fmt.Errorf("could not execute migration %s: %w", fileName, err)
+		}
+
+	}
+	return nil
+}
+
+func rollbackMigrations(db *sql.DB) error {
+	dirs, err := migrations.ReadDir("migrations")
+
+	if err != nil {
+		return err
+	}
+
+	for i, j := 0, len(dirs)-1; i < j; i, j = i+1, j-1 {
+		dirs[i], dirs[j] = dirs[j], dirs[i]
+	}
+
+	for _, entry := range dirs {
+		if !strings.Contains(entry.Name(), ".down.sql") {
+			continue
+		}
+
+		fileName := "migrations/" + entry.Name()
+		content, err := migrations.ReadFile(fileName)
+
+		if err != nil {
+			return fmt.Errorf("could not read migration file %s: %w", fileName, err)
+		}
+
+		if _, err := db.Exec(string(content)); err != nil {
+			return fmt.Errorf("could not execute migration %s: %w", fileName, err)
+		}
 	}
 
 	return nil
