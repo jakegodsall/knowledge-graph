@@ -21,3 +21,7 @@ func NewKnowledgeTree(name string) *KnowledgeTree {
 		UpdatedAt: time.Now(),
 	}
 }
+
+func (t *KnowledgeTree) Touch() {
+	t.UpdatedAt = time.Now()
+}
