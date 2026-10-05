@@ -3,13 +3,15 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"jakegodsall/knowledge-graph/src/domain"
 	"jakegodsall/knowledge-graph/src/repository"
 	"jakegodsall/knowledge-graph/src/repository/sqlite"
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "embed"
 
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Config struct {
@@ -25,6 +27,9 @@ func defaultConfig() Config {
 
 var ktreeRepository repository.KnowledgeTreeRepository
 
+//go:embed migrations/001_create_knowledge_trees_table.up.sql
+var schema string
+
 func main() {
 	config := defaultConfig()
 
@@ -38,6 +43,9 @@ func main() {
 		fmt.Println("could not open database")
 		os.Exit(1)
 	}
+
+	db.Exec(schema)
+
 	ktreeRepository := sqlite.NewKnowledgeTreeRepository(db)
 
 	if len(os.Args) < 2 {
@@ -54,6 +62,11 @@ func main() {
 		}
 	case "show":
 		runShow(os.Args[2:])
+	case "create":
+		err := runCreate(os.Args[2:], ktreeRepository)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 }
 
@@ -72,4 +85,18 @@ func runList(repo repository.KnowledgeTreeRepository) error {
 
 func runShow(args []string) {
 	fmt.Println("run show")
+}
+
+func runCreate(args []string, repo repository.KnowledgeTreeRepository) error {
+	if len(args) == 0 {
+		return fmt.Errorf("No tree provided")
+	}
+
+	err := repo.Create(domain.NewKnowledgeTree(args[0]))
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
