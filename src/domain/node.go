@@ -16,7 +16,7 @@ const (
 type Node struct {
 	ID        uuid.UUID `json:"id"`
 	GraphID   uuid.UUID `json:"graph_id"`
-	ParentID *uuid.UUID `json:"parent_id"`
+	ParentID  *uuid.UUID `json:"parent_id"`
 	Name      string    `json:"name"`
 	Status    Status    `json:"status"`
 	Position  uint16    `json:"position"`
@@ -39,5 +39,9 @@ func NewNode(graphID uuid.UUID, parentID *uuid.UUID, name string, position uint1
 
 func (node *Node) Complete() {
 	node.Status = StatusComplete
+	node.Touch()
+}
+
+func (node *Node) Touch() {
 	node.UpdatedAt = time.Now()
 }
