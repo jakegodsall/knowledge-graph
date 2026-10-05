@@ -15,6 +15,10 @@ func NewKnowledgeTreeRepository() *KnowledgeTreeRepository {
 	return &KnowledgeTreeRepository{}
 }
 
+func (r *KnowledgeTreeRepository) GetAll() ([]*domain.KnowledgeTree, error) {
+	return r.trees, nil
+}
+
 func (r *KnowledgeTreeRepository) Create(tree *domain.KnowledgeTree) error {
 	r.trees = append(r.trees, tree)
 	return nil

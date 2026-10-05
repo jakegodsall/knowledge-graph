@@ -18,6 +18,40 @@ func NewKnowledgeTreeRepository(db *sql.DB) *KnowledgeTreeRepository {
 	}
 }
 
+func (r *KnowledgeTreeRepository) GetAll() ([]*domain.KnowledgeTree, error) {
+	rows, err := r.db.Query(`
+		SELECT id, name, created_at, updated_at
+		FROM knowledge_trees
+	`)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	trees := []*domain.KnowledgeTree{}
+
+	for rows.Next() {
+		tree := &domain.KnowledgeTree{}
+
+		if err := rows.Scan(
+			&tree.ID,
+			&tree.Name,
+			&tree.CreatedAt,
+			&tree.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return trees, nil
+}
+
 func (r *KnowledgeTreeRepository) Create(tree *domain.KnowledgeTree) error {
 	res, err := r.db.Exec(`
 			INSERT INTO knowledge_trees (id, name, created_at, updated_at)
