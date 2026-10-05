@@ -43,6 +43,8 @@ func (r *KnowledgeTreeRepository) GetAll() ([]*domain.KnowledgeTree, error) {
 		); err != nil {
 			return nil, err
 		}
+
+		trees = append(trees, tree)
 	}
 
 	if err := rows.Err(); err != nil {
