@@ -99,7 +99,7 @@ func (r *KnowledgeTreeRepository) FindByID(id uuid.UUID) (*domain.KnowledgeTree,
 		&tree.UpdatedAt,
 	); err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no knowledge tree fund for id %s", id.String())
+			return nil, fmt.Errorf("no knowledge tree found for id %s", id.String())
 		}
 		return nil, err
 	}
