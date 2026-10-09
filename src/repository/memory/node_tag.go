@@ -26,6 +26,10 @@ func (r *NodeTagRepository) Create(tag *domain.NodeTag) error {
 	return nil
 }
 
+func (r *NodeTagRepository) GetAll() ([]*domain.NodeTag, error) {
+	return append([]*domain.NodeTag{}, r.tags...), nil
+}
+
 func (r *NodeTagRepository) FindByNode(nodeID uuid.UUID) ([]*domain.NodeTag, error) {
 	found := []*domain.NodeTag{}
 

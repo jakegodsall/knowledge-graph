@@ -49,6 +49,14 @@ func (r *NodeTagRepository) Create(tag *domain.NodeTag) error {
 	return nil
 }
 
+func (r *NodeTagRepository) GetAll() ([]*domain.NodeTag, error) {
+	return r.query(`
+			SELECT node_id, tag, created_at
+			FROM node_tags
+			ORDER BY tag
+		`)
+}
+
 func (r *NodeTagRepository) FindByNode(nodeID uuid.UUID) ([]*domain.NodeTag, error) {
 	return r.query(`
 			SELECT node_id, tag, created_at
