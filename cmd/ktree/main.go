@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := sql.Open("sqlite3", config.DBPath)
+	db, err := sql.Open("sqlite3", config.DBPath+"?_foreign_keys=on")
 	if err != nil {
 		fmt.Printf("could not open database: %v\n", err)
 		os.Exit(1)
