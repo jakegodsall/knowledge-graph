@@ -17,7 +17,7 @@ const usage = `usage: ktree <command> [arguments]
 trees:
   list                                   list all trees
   create <name>                          create a tree
-  show <tree>                            show a tree's nodes
+  show <tree> [--node <node>]            show a tree's nodes, optionally from a subtree
   delete-tree <tree>                     delete a tree and all its nodes
 
 nodes:
@@ -73,18 +73,35 @@ func (a *app) runCreate(args []string) error {
 }
 
 func (a *app) runShow(args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: ktree show <tree>")
-	}
+	flags := flag.NewFlagSet("show", flag.ContinueOnError)
+	nodeArg := flags.String("node", "", "node ID or prefix to start from")
 
-	tree, err := a.resolveTree(args[0])
-
+	positional, err := parseArgs(flags, args)
 	if err != nil {
 		return err
 	}
 
-	nodes, err := a.nodes.FindByTree(tree.ID)
+	if len(positional) > 1 || (len(positional) == 0 && *nodeArg == "") {
+		return fmt.Errorf("usage: ktree show <tree> [--node <node>]")
+	}
 
+	var tree *domain.KnowledgeTree
+	var start *domain.Node
+
+	if *nodeArg != "" {
+		if start, err = a.resolveNode(*nodeArg); err != nil {
+			return err
+		}
+		if tree, err = a.trees.FindByID(start.GraphID); err != nil {
+			return err
+		}
+	} else {
+		if tree, err = a.resolveTree(positional[0]); err != nil {
+			return err
+		}
+	}
+
+	nodes, err := a.nodes.FindByTree(tree.ID)
 	if err != nil {
 		return err
 	}
@@ -92,25 +109,45 @@ func (a *app) runShow(args []string) error {
 	// group by parent; roots sit under uuid.Nil. Nodes arrive ordered by
 	// position, so each group keeps its sibling order.
 	children := map[uuid.UUID][]*domain.Node{}
-	completed := 0
-
-	for _, node := range nodes {
+	for _, n := range nodes {
 		parent := uuid.Nil
-
-		if node.ParentID != nil {
-			parent = *node.ParentID
+		if n.ParentID != nil {
+			parent = *n.ParentID
 		}
-
-		children[parent] = append(children[parent], node)
-
-		if node.Status == domain.StatusComplete {
-			completed++
-		}
+		children[parent] = append(children[parent], n)
 	}
 
-	fmt.Printf("%s [%s]  %d/%d complete\n", tree.Name, shortID(tree.ID), completed, len(nodes))
+	if start == nil {
+		completed := 0
+		for _, n := range nodes {
+			if n.Status == domain.StatusComplete {
+				completed++
+			}
+		}
+		fmt.Printf("%s [%s]  %d/%d complete\n", tree.Name, shortID(tree.ID), completed, len(nodes))
+		return a.printNodes(children, uuid.Nil, "")
+	}
 
-	return a.printNodes(children, uuid.Nil, "")
+	done, total := subtreeCounts(children, start)
+	status := "○"
+	if start.Status == domain.StatusComplete {
+		status = "✓"
+	}
+	fmt.Printf("%s %s [%s]  %d/%d complete\n", status, start.Name, shortID(start.ID), done, total)
+	return a.printNodes(children, start.ID, "")
+}
+
+func subtreeCounts(children map[uuid.UUID][]*domain.Node, n *domain.Node) (done, total int) {
+	total = 1
+	if n.Status == domain.StatusComplete {
+		done = 1
+	}
+	for _, child := range children[n.ID] {
+		d, t := subtreeCounts(children, child)
+		done += d
+		total += t
+	}
+	return
 }
 
 func (a *app) printNodes(children map[uuid.UUID][]*domain.Node, parent uuid.UUID, indent string) error {
