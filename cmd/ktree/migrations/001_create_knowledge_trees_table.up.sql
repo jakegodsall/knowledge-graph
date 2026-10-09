@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS knowledge_trees (
+CREATE TABLE knowledge_trees (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT UNIQUE NOT NULL,
     created_at DATETIME NOT NULL,

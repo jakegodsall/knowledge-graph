@@ -4,12 +4,11 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"jakegodsall/knowledge-graph/src/domain"
-	"jakegodsall/knowledge-graph/src/repository"
 	"jakegodsall/knowledge-graph/src/repository/sqlite"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -37,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := sql.Open("sqlite3", config.DBPath)
+	db, err := sql.Open("sqlite3", config.DBPath+"?_foreign_keys=on")
 	if err != nil {
 		fmt.Printf("could not open database: %v\n", err)
 		os.Exit(1)
@@ -49,62 +48,66 @@ func main() {
 		os.Exit(1)
 	}
 
-	ktreeRepository := sqlite.NewKnowledgeTreeRepository(db)
+	a := &app{
+		trees:         sqlite.NewKnowledgeTreeRepository(db),
+		nodes:         sqlite.NewNodeRepository(db),
+		prerequisites: sqlite.NewPrerequisiteRepository(db),
+		tags:          sqlite.NewNodeTagRepository(db),
+	}
+
+	commands := map[string]func([]string) error{
+		"list":        a.runList,
+		"create":      a.runCreate,
+		"show":        a.runShow,
+		"delete-tree": a.runDeleteTree,
+		"add-node":    a.runAddNode,
+		"update-node": a.runUpdateNode,
+		"delete-node": a.runDeleteNode,
+		"complete":    a.runComplete,
+		"require":     a.runRequire,
+		"tag":         a.runTag,
+		"import":      a.runImport,
+	}
 
 	if len(os.Args) < 2 {
-		fmt.Println("temp")
+		fmt.Fprintln(os.Stderr, usage)
 		os.Exit(1)
 	}
 
-	switch(os.Args[1]) {
-	case "list":
-		err := runList(ktreeRepository)
-		if err != nil {
-			fmt.Println("could not list trees")
-			os.Exit(1)
-		}
-	case "show":
-		runShow(os.Args[2:])
-	case "create":
-		err := runCreate(os.Args[2:], ktreeRepository)
-		if err != nil {
-			fmt.Println(err)
-		}
+	command, ok := commands[os.Args[1]]
+
+	if !ok {
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n%s\n", os.Args[1], usage)
+		os.Exit(1)
+	}
+
+	if err := command(os.Args[2:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 
-func runList(repo repository.KnowledgeTreeRepository) error {
-	trees, err := repo.GetAll()
-
-	if err != nil {
-		return err
-	}
-
-	for _, tree := range trees {
-		fmt.Println(tree)
-	}
-	return nil
-}
-
-func runShow(args []string) {
-	fmt.Println("run show")
-}
-
-func runCreate(args []string, repo repository.KnowledgeTreeRepository) error {
-	if len(args) == 0 {
-		return fmt.Errorf("No tree provided")
-	}
-
-	err := repo.Create(domain.NewKnowledgeTree(args[0]))
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
+// schema_migrations records which migrations have been applied, keyed by the
+// migration file name without its .up.sql / .down.sql suffix.
+const createSchemaMigrationsTable = `
+	CREATE TABLE IF NOT EXISTS schema_migrations (
+		version TEXT PRIMARY KEY NOT NULL,
+		applied_at DATETIME NOT NULL
+	)
+`
 
 func runMigrations(db *sql.DB) error {
+	if _, err := db.Exec(createSchemaMigrationsTable); err != nil {
+		return fmt.Errorf("could not create schema_migrations table: %w", err)
+	}
+
+	applied, err := appliedMigrations(db)
+
+	if err != nil {
+		return err
+	}
+
+	// embed.FS returns entries sorted by file name, so migrations run in order
 	dirs, err := migrations.ReadDir("migrations")
 
 	if err != nil {
@@ -112,7 +115,9 @@ func runMigrations(db *sql.DB) error {
 	}
 
 	for _, entry := range dirs {
-		if !strings.Contains(entry.Name(), ".up.sql") {
+		version, isUp := strings.CutSuffix(entry.Name(), ".up.sql")
+
+		if !isUp || applied[version] {
 			continue
 		}
 
@@ -123,15 +128,33 @@ func runMigrations(db *sql.DB) error {
 			return fmt.Errorf("could not read migration file %s: %w", fileName, err)
 		}
 
-		if _, err := db.Exec(string(content)); err != nil {
+		err = execMigration(
+			db,
+			string(content),
+			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+			version,
+			time.Now(),
+		)
+
+		if err != nil {
 			return fmt.Errorf("could not execute migration %s: %w", fileName, err)
 		}
-
 	}
+
 	return nil
 }
 
 func rollbackMigrations(db *sql.DB) error {
+	if _, err := db.Exec(createSchemaMigrationsTable); err != nil {
+		return fmt.Errorf("could not create schema_migrations table: %w", err)
+	}
+
+	applied, err := appliedMigrations(db)
+
+	if err != nil {
+		return err
+	}
+
 	dirs, err := migrations.ReadDir("migrations")
 
 	if err != nil {
@@ -143,7 +166,9 @@ func rollbackMigrations(db *sql.DB) error {
 	}
 
 	for _, entry := range dirs {
-		if !strings.Contains(entry.Name(), ".down.sql") {
+		version, isDown := strings.CutSuffix(entry.Name(), ".down.sql")
+
+		if !isDown || !applied[version] {
 			continue
 		}
 
@@ -154,10 +179,67 @@ func rollbackMigrations(db *sql.DB) error {
 			return fmt.Errorf("could not read migration file %s: %w", fileName, err)
 		}
 
-		if _, err := db.Exec(string(content)); err != nil {
+		err = execMigration(
+			db,
+			string(content),
+			"DELETE FROM schema_migrations WHERE version = ?",
+			version,
+		)
+
+		if err != nil {
 			return fmt.Errorf("could not execute migration %s: %w", fileName, err)
 		}
 	}
 
 	return nil
+}
+
+func appliedMigrations(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query("SELECT version FROM schema_migrations")
+
+	if err != nil {
+		return nil, fmt.Errorf("could not read schema_migrations: %w", err)
+	}
+
+	defer rows.Close()
+
+	applied := map[string]bool{}
+
+	for rows.Next() {
+		var version string
+
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+
+		applied[version] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return applied, nil
+}
+
+// execMigration runs a migration's SQL and updates schema_migrations in a
+// single transaction, so a failed migration is never recorded as applied.
+func execMigration(db *sql.DB, migrationSQL string, recordQuery string, recordArgs ...any) error {
+	tx, err := db.Begin()
+
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(migrationSQL); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(recordQuery, recordArgs...); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS nodes (
+CREATE TABLE nodes (
     id TEXT PRIMARY KEY NOT NULL,
     graph_id TEXT NOT NULL,
     parent_id TEXT,
