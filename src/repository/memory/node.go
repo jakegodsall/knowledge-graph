@@ -63,6 +63,31 @@ func (r *NodeRepository) FindChildren(parentID uuid.UUID) ([]*domain.Node, error
 	}), nil
 }
 
+func (r *NodeRepository) Search(query string, limit int) ([]*domain.Node, error) {
+	query = strings.ToLower(query)
+	found := []*domain.Node{}
+
+	for _, n := range r.nodes {
+		if strings.Contains(strings.ToLower(n.Name), query) {
+			found = append(found, n)
+		}
+	}
+
+	sort.SliceStable(found, func(i, j int) bool {
+		if len(found[i].Name) != len(found[j].Name) {
+			return len(found[i].Name) < len(found[j].Name)
+		}
+
+		return found[i].Name < found[j].Name
+	})
+
+	if len(found) > limit {
+		found = found[:limit]
+	}
+
+	return found, nil
+}
+
 // filter returns matching nodes ordered by position, like the SQLite queries.
 func (r *NodeRepository) filter(match func(*domain.Node) bool) []*domain.Node {
 	found := []*domain.Node{}

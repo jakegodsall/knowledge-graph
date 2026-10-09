@@ -127,6 +127,23 @@ func (r *NodeRepository) FindChildren(parentID uuid.UUID) ([]*domain.Node, error
 	)
 }
 
+func (r *NodeRepository) Search(query string, limit int) ([]*domain.Node, error) {
+	// escape LIKE wildcards so "%" and "_" in the query match literally
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+
+	// shortest names first, so exact and near-exact matches come out on top
+	return r.query(`
+			SELECT id, graph_id, parent_id, name, status, position, created_at, updated_at
+			FROM nodes
+			WHERE name LIKE ? ESCAPE '\'
+			ORDER BY length(name), name
+			LIMIT ?
+		`,
+		"%"+escaped+"%",
+		limit,
+	)
+}
+
 func (r *NodeRepository) query(query string, args ...any) ([]*domain.Node, error) {
 	rows, err := r.db.Query(query, args...)
 

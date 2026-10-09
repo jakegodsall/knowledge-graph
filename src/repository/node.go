@@ -15,6 +15,8 @@ type NodeRepository interface {
 	FindByTree(graphID uuid.UUID) ([]*domain.Node, error)
 	FindRoots(graphID uuid.UUID) ([]*domain.Node, error)
 	FindChildren(parentID uuid.UUID) ([]*domain.Node, error)
+	// Search returns up to limit nodes whose name contains query, ignoring case.
+	Search(query string, limit int) ([]*domain.Node, error)
 	Update(node *domain.Node) error
 	// DeleteByID deletes the node and all of its descendants.
 	DeleteByID(id uuid.UUID) error
