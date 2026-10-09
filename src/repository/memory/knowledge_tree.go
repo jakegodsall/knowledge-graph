@@ -34,6 +34,16 @@ func (r *KnowledgeTreeRepository) FindByID(id uuid.UUID) (*domain.KnowledgeTree,
 	return nil, fmt.Errorf("no knowledge tree found for id %s", id.String())
 }
 
+func (r *KnowledgeTreeRepository) FindByName(name string) (*domain.KnowledgeTree, error) {
+	for _, k := range r.trees {
+		if k.Name == name {
+			return k, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no knowledge tree found with name %s", name)
+}
+
 func (r *KnowledgeTreeRepository) DeleteByID(id uuid.UUID) error {
 	idx := -1
 
