@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"jakegodsall/knowledge-graph/src/domain"
+	"jakegodsall/knowledge-graph/src/lookup"
 	"jakegodsall/knowledge-graph/src/repository"
 	"strings"
 
@@ -34,9 +35,6 @@ import:
 
 <tree> is a tree name or ID. <node> is a node ID or any unique prefix of
 one, as printed by show.`
-
-// minPrefixLength stops very short prefixes matching half the database.
-const minPrefixLength = 4
 
 type app struct {
 	trees         repository.KnowledgeTreeRepository
@@ -365,42 +363,11 @@ func (a *app) runTag(args []string) error {
 }
 
 func (a *app) resolveTree(arg string) (*domain.KnowledgeTree, error) {
-	if id, err := uuid.Parse(arg); err == nil {
-		return a.trees.FindByID(id)
-	}
-
-	return a.trees.FindByName(arg)
+	return lookup.Tree(a.trees, arg)
 }
 
 func (a *app) resolveNode(arg string) (*domain.Node, error) {
-	if id, err := uuid.Parse(arg); err == nil {
-		return a.nodes.FindByID(id)
-	}
-
-	if len(arg) < minPrefixLength {
-		return nil, fmt.Errorf("node ID %q is too short, use at least %d characters", arg, minPrefixLength)
-	}
-
-	matches, err := a.nodes.FindByIDPrefix(arg)
-
-	if err != nil {
-		return nil, err
-	}
-
-	switch len(matches) {
-	case 0:
-		return nil, fmt.Errorf("no node found for id %s", arg)
-	case 1:
-		return matches[0], nil
-	}
-
-	names := []string{}
-
-	for _, m := range matches {
-		names = append(names, fmt.Sprintf("%s [%s]", m.Name, m.ID.String()))
-	}
-
-	return nil, fmt.Errorf("node ID %s is ambiguous, it matches:\n  %s", arg, strings.Join(names, "\n  "))
+	return lookup.Node(a.nodes, arg)
 }
 
 func parseArgs(flags *flag.FlagSet, args []string) ([]string, error) {
@@ -423,5 +390,5 @@ func parseArgs(flags *flag.FlagSet, args []string) ([]string, error) {
 }
 
 func shortID(id uuid.UUID) string {
-	return id.String()[:8]
+	return lookup.ShortID(id)
 }

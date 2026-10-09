@@ -42,6 +42,11 @@ func (node *Node) Complete() {
 	node.Touch()
 }
 
+func (node *Node) Reopen() {
+	node.Status = StatusIncomplete
+	node.Touch()
+}
+
 func (node *Node) Rename(name string) {
 	node.Name = name
 	node.Touch()

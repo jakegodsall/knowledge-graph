@@ -30,6 +30,10 @@ func (r *PrerequisiteRepository) Create(prerequisite *domain.Prerequisite) error
 	return nil
 }
 
+func (r *PrerequisiteRepository) GetAll() ([]*domain.Prerequisite, error) {
+	return append([]*domain.Prerequisite{}, r.prerequisites...), nil
+}
+
 func (r *PrerequisiteRepository) FindByNode(nodeID uuid.UUID) ([]*domain.Prerequisite, error) {
 	found := []*domain.Prerequisite{}
 
