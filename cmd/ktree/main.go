@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -104,7 +105,27 @@ func runCreate(args []string, repo repository.KnowledgeTreeRepository) error {
 	return nil
 }
 
+// schema_migrations records which migrations have been applied, keyed by the
+// migration file name without its .up.sql / .down.sql suffix.
+const createSchemaMigrationsTable = `
+	CREATE TABLE IF NOT EXISTS schema_migrations (
+		version TEXT PRIMARY KEY NOT NULL,
+		applied_at DATETIME NOT NULL
+	)
+`
+
 func runMigrations(db *sql.DB) error {
+	if _, err := db.Exec(createSchemaMigrationsTable); err != nil {
+		return fmt.Errorf("could not create schema_migrations table: %w", err)
+	}
+
+	applied, err := appliedMigrations(db)
+
+	if err != nil {
+		return err
+	}
+
+	// embed.FS returns entries sorted by file name, so migrations run in order
 	dirs, err := migrations.ReadDir("migrations")
 
 	if err != nil {
@@ -112,7 +133,9 @@ func runMigrations(db *sql.DB) error {
 	}
 
 	for _, entry := range dirs {
-		if !strings.Contains(entry.Name(), ".up.sql") {
+		version, isUp := strings.CutSuffix(entry.Name(), ".up.sql")
+
+		if !isUp || applied[version] {
 			continue
 		}
 
@@ -123,15 +146,33 @@ func runMigrations(db *sql.DB) error {
 			return fmt.Errorf("could not read migration file %s: %w", fileName, err)
 		}
 
-		if _, err := db.Exec(string(content)); err != nil {
+		err = execMigration(
+			db,
+			string(content),
+			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
+			version,
+			time.Now(),
+		)
+
+		if err != nil {
 			return fmt.Errorf("could not execute migration %s: %w", fileName, err)
 		}
-
 	}
+
 	return nil
 }
 
 func rollbackMigrations(db *sql.DB) error {
+	if _, err := db.Exec(createSchemaMigrationsTable); err != nil {
+		return fmt.Errorf("could not create schema_migrations table: %w", err)
+	}
+
+	applied, err := appliedMigrations(db)
+
+	if err != nil {
+		return err
+	}
+
 	dirs, err := migrations.ReadDir("migrations")
 
 	if err != nil {
@@ -143,7 +184,9 @@ func rollbackMigrations(db *sql.DB) error {
 	}
 
 	for _, entry := range dirs {
-		if !strings.Contains(entry.Name(), ".down.sql") {
+		version, isDown := strings.CutSuffix(entry.Name(), ".down.sql")
+
+		if !isDown || !applied[version] {
 			continue
 		}
 
@@ -154,10 +197,67 @@ func rollbackMigrations(db *sql.DB) error {
 			return fmt.Errorf("could not read migration file %s: %w", fileName, err)
 		}
 
-		if _, err := db.Exec(string(content)); err != nil {
+		err = execMigration(
+			db,
+			string(content),
+			"DELETE FROM schema_migrations WHERE version = ?",
+			version,
+		)
+
+		if err != nil {
 			return fmt.Errorf("could not execute migration %s: %w", fileName, err)
 		}
 	}
 
 	return nil
+}
+
+func appliedMigrations(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query("SELECT version FROM schema_migrations")
+
+	if err != nil {
+		return nil, fmt.Errorf("could not read schema_migrations: %w", err)
+	}
+
+	defer rows.Close()
+
+	applied := map[string]bool{}
+
+	for rows.Next() {
+		var version string
+
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+
+		applied[version] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return applied, nil
+}
+
+// execMigration runs a migration's SQL and updates schema_migrations in a
+// single transaction, so a failed migration is never recorded as applied.
+func execMigration(db *sql.DB, migrationSQL string, recordQuery string, recordArgs ...any) error {
+	tx, err := db.Begin()
+
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(migrationSQL); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(recordQuery, recordArgs...); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
