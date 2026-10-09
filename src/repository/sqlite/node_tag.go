@@ -28,6 +28,10 @@ func (r *NodeTagRepository) Create(tag *domain.NodeTag) error {
 		tag.CreatedAt,
 	)
 
+	if isDuplicate(err) {
+		return fmt.Errorf("node %s is already tagged %s", tag.NodeID.String(), tag.Tag)
+	}
+
 	if err != nil {
 		return err
 	}

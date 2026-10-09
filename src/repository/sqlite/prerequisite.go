@@ -62,6 +62,10 @@ func (r *PrerequisiteRepository) Create(prerequisite *domain.Prerequisite) error
 		prerequisite.CreatedAt,
 	)
 
+	if isDuplicate(err) {
+		return fmt.Errorf("node %s already requires node %s", prerequisite.NodeID.String(), prerequisite.RequiresNodeID.String())
+	}
+
 	if err != nil {
 		return err
 	}
