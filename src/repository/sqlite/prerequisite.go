@@ -83,6 +83,13 @@ func (r *PrerequisiteRepository) Create(prerequisite *domain.Prerequisite) error
 	return tx.Commit()
 }
 
+func (r *PrerequisiteRepository) GetAll() ([]*domain.Prerequisite, error) {
+	return r.query(`
+			SELECT node_id, requires_node_id, created_at
+			FROM node_prerequisites
+		`)
+}
+
 func (r *PrerequisiteRepository) FindByNode(nodeID uuid.UUID) ([]*domain.Prerequisite, error) {
 	return r.query(`
 			SELECT node_id, requires_node_id, created_at
