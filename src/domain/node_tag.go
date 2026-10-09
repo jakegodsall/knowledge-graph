@@ -28,6 +28,8 @@ func NewNodeTag(nodeID uuid.UUID, tag string) (*NodeTag, error) {
 	}, nil
 }
 
+// NormaliseTag lowercases the tag and joins its words with hyphens, so
+// " Exam  Topic " becomes "exam-topic".
 func NormaliseTag(tag string) string {
-	return strings.ToLower(strings.TrimSpace(tag))
+	return strings.ToLower(strings.Join(strings.Fields(tag), "-"))
 }
