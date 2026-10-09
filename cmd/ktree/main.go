@@ -66,6 +66,7 @@ func main() {
 		"complete":    a.runComplete,
 		"require":     a.runRequire,
 		"tag":         a.runTag,
+		"import":      a.runImport,
 	}
 
 	if len(os.Args) < 2 {

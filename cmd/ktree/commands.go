@@ -29,6 +29,9 @@ study order:
   require <node> <required-node>         learn <node> after <required-node>
   tag <node> <tag>                       tag a node, e.g. sap-c02
 
+import:
+  import <file.graphml> [--dry-run]      import trees from a yEd Live export
+
 <tree> is a tree name or ID. <node> is a node ID or any unique prefix of
 one, as printed by show.`
 
