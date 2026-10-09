@@ -32,19 +32,21 @@ func main() {
 	config := defaultConfig()
 
 	if err := os.MkdirAll(filepath.Dir(config.DBPath), 0755); err != nil {
-		fmt.Printf("could not create data directory: %v\n", err)
+		fmt.Fprintf(os.Stderr, "could not create data directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	db, err := sql.Open("sqlite3", config.DBPath+"?_foreign_keys=on")
+	// WAL and a busy timeout let the CLI and the MCP server share the file
+	// without "database is locked" errors
+	db, err := sql.Open("sqlite3", config.DBPath+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
-		fmt.Printf("could not open database: %v\n", err)
+		fmt.Fprintf(os.Stderr, "could not open database: %v\n", err)
 		os.Exit(1)
 	}
 
 	err = runMigrations(db)
 	if err != nil {
-		fmt.Printf("error running migrations: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error running migrations: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -67,6 +69,7 @@ func main() {
 		"require":     a.runRequire,
 		"tag":         a.runTag,
 		"import":      a.runImport,
+		"mcp":         a.runMCP,
 	}
 
 	if len(os.Args) < 2 {
