@@ -116,11 +116,83 @@ func (r *NodeRepository) Update(node *domain.Node) error {
 	return fmt.Errorf("no node found for id %s", node.ID.String())
 }
 
-func (r *NodeRepository) DeleteByID(id uuid.UUID) error {
-	if _, err := r.FindByID(id); err != nil {
+func (r *NodeRepository) InsertAt(node *domain.Node, index int) error {
+	siblings := r.siblings(node.GraphID, node.ParentID, uuid.Nil)
+	node.Position = positionForIndex(siblings, index)
+
+	for _, s := range siblings {
+		if s.Position >= node.Position {
+			s.Position++
+		}
+	}
+
+	r.nodes = append(r.nodes, node)
+	return nil
+}
+
+func (r *NodeRepository) Move(id uuid.UUID, parentID *uuid.UUID, index int) error {
+	node, err := r.FindByID(id)
+
+	if err != nil {
 		return err
 	}
 
+	if parentID != nil {
+		parent, err := r.FindByID(*parentID)
+
+		if err != nil {
+			return err
+		}
+
+		if parent.GraphID != node.GraphID {
+			return fmt.Errorf("node %s can't move to another tree", id)
+		}
+
+		if r.subtree(id)[*parentID] {
+			return fmt.Errorf("node %s can't move under itself or one of its descendants", id)
+		}
+	}
+
+	r.closeGap(node)
+
+	siblings := r.siblings(node.GraphID, parentID, id)
+	position := positionForIndex(siblings, index)
+
+	for _, s := range siblings {
+		if s.Position >= position {
+			s.Position++
+		}
+	}
+
+	node.ParentID = parentID
+	node.Position = position
+	node.Touch()
+	return nil
+}
+
+func (r *NodeRepository) DeleteByID(id uuid.UUID) error {
+	node, err := r.FindByID(id)
+
+	if err != nil {
+		return err
+	}
+
+	subtree := r.subtree(id)
+	remaining := []*domain.Node{}
+
+	for _, n := range r.nodes {
+		if !subtree[n.ID] {
+			remaining = append(remaining, n)
+		}
+	}
+
+	r.nodes = remaining
+	r.closeGap(node)
+	return nil
+}
+
+// subtree returns id and all of its descendants.
+func (r *NodeRepository) subtree(id uuid.UUID) map[uuid.UUID]bool {
 	subtree := map[uuid.UUID]bool{id: true}
 
 	// keep sweeping until no more descendants are found
@@ -135,14 +207,48 @@ func (r *NodeRepository) DeleteByID(id uuid.UUID) error {
 		}
 	}
 
-	remaining := []*domain.Node{}
+	return subtree
+}
 
-	for _, n := range r.nodes {
-		if !subtree[n.ID] {
-			remaining = append(remaining, n)
+// siblings returns the nodes under a parent ordered by position, leaving out
+// exclude (uuid.Nil excludes nothing).
+func (r *NodeRepository) siblings(graphID uuid.UUID, parentID *uuid.UUID, exclude uuid.UUID) []*domain.Node {
+	return r.filter(func(n *domain.Node) bool {
+		return n.GraphID == graphID && sameParent(n.ParentID, parentID) && n.ID != exclude
+	})
+}
+
+// closeGap moves the node's later siblings up one once it has left.
+func (r *NodeRepository) closeGap(node *domain.Node) {
+	for _, s := range r.siblings(node.GraphID, node.ParentID, node.ID) {
+		if s.Position > node.Position {
+			s.Position--
 		}
 	}
+}
 
-	r.nodes = remaining
-	return nil
+func sameParent(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+
+	return *a == *b
+}
+
+// positionForIndex converts a 0-based index among siblings into a position
+// value. Indexes past the end append.
+func positionForIndex(siblings []*domain.Node, index int) uint16 {
+	if index < 0 {
+		index = 0
+	}
+
+	if index < len(siblings) {
+		return siblings[index].Position
+	}
+
+	if len(siblings) == 0 {
+		return 0
+	}
+
+	return siblings[len(siblings)-1].Position + 1
 }

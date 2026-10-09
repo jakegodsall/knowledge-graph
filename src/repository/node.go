@@ -17,7 +17,16 @@ type NodeRepository interface {
 	FindChildren(parentID uuid.UUID) ([]*domain.Node, error)
 	// Search returns up to limit nodes whose name contains query, ignoring case.
 	Search(query string, limit int) ([]*domain.Node, error)
+	// InsertAt creates the node at a 0-based index among its siblings, moving
+	// later siblings down one. An index past the end appends. It sets
+	// node.Position.
+	InsertAt(node *domain.Node, index int) error
+	// Move puts the node, with its subtree, at a 0-based index under a new
+	// parent in the same tree (nil for the top level). It fails if the new
+	// parent is the node itself or one of its descendants.
+	Move(id uuid.UUID, parentID *uuid.UUID, index int) error
 	Update(node *domain.Node) error
-	// DeleteByID deletes the node and all of its descendants.
+	// DeleteByID deletes the node and all of its descendants, and closes the
+	// gap among its siblings.
 	DeleteByID(id uuid.UUID) error
 }

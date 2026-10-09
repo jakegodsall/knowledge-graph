@@ -59,11 +59,13 @@ func New(repos Repositories) *mcp.Server {
 	}, h.getTree)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "search_nodes",
+		Name: "search_nodes",
 		Description: "Find topics whose name contains the query (case-insensitive substring), across all trees, with the path to each one. " +
 			"Matching is literal, so search a word stem to catch variants: \"polic\" finds both \"Policy\" and \"Policies\".",
 		Annotations: readOnly,
 	}, h.searchNodes)
+
+	h.addWriteTools(server)
 
 	return server
 }
@@ -153,10 +155,22 @@ func (h *handlers) getTree(ctx context.Context, req *mcp.CallToolRequest, in get
 		return nil, nil, err
 	}
 
-	snap, err := h.snapshot(tree)
+	outline, err := h.outline(tree, start, depth)
 
 	if err != nil {
 		return nil, nil, err
+	}
+
+	return text(outline), nil, nil
+}
+
+// outline renders a whole tree (start nil) or one branch of it, depth levels
+// deep.
+func (h *handlers) outline(tree *domain.KnowledgeTree, start *domain.Node, depth int) (string, error) {
+	snap, err := h.snapshot(tree)
+
+	if err != nil {
+		return "", err
 	}
 
 	var out strings.Builder
@@ -183,7 +197,7 @@ func (h *handlers) getTree(ctx context.Context, req *mcp.CallToolRequest, in get
 		fmt.Fprintf(&out, "… output truncated at %d lines; expand a branch with node=<id> instead\n", maxLines)
 	}
 
-	return text(out.String()), nil, nil
+	return out.String(), nil
 }
 
 type searchInput struct {
